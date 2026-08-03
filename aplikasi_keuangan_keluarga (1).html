@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FamilyCash - Presisi Spreadsheet Keuangan Keluarga</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .z-loading { z-index: 9999; }
+        .z-toast { z-index: 2000; }
+        .z-modal { z-index: 1000; }
+        .hide-scroll::-webkit-scrollbar { display: none; }
+        .active-tab { background-color: #eef2ff; color: #4f46e5; border-left: 4px solid #4f46e5; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen">
+
+    <!-- LOADING OVERLAY -->
+    <div id="loadingOverlay" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-loading flex flex-col items-center justify-center text-white">
+        <div class="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+        <p id="loadingText" class="font-bold tracking-wide text-sm">Memproses Data...</p>
+    </div>
+
+    <!-- TOAST NOTIFICATION -->
+    <div id="toastContainer" class="fixed top-5 right-5 z-toast flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- MODAL SYSTEM -->
+    <div id="modalOverlay" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-modal flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl shadow-2xl max-w-xl w-full overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <h3 id="modalTitle" class="font-extrabold text-slate-800">Judul Modal</h3>
+                <button onclick="closeModal()" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-200 transition text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="modalBody" class="p-6 max-h-[75vh] overflow-y-auto"></div>
+            <div id="modalFooter" class="px-6 py-4 bg-slate-50/80 border-t border-slate-100 flex justify-end gap-3"></div>
+        </div>
+    </div>
+
+    <!-- LOGIN SECTION (AUTH GUARD) -->
+    <div id="loginSection" class="min-h-screen flex items-center justify-center p-6 bg-slate-900">
+        <div class="bg-white p-8 md:p-12 rounded-[2.5rem] shadow-2xl w-full max-w-md">
+            <div class="text-center mb-10">
+                <div class="w-20 h-20 bg-indigo-600 text-white rounded-3xl flex items-center justify-center mx-auto mb-4 text-3xl shadow-lg shadow-indigo-200">
+                    <i class="fa-solid fa-receipt"></i>
+                </div>
+                <h1 class="text-3xl font-extrabold text-slate-800">FamilyCash</h1>
+                <p class="text-slate-500 mt-2 text-sm font-medium">Presisi Pencatatan Keuangan Keluarga</p>
+            </div>
+            <form onsubmit="handleLogin(event)" class="space-y-5">
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1.5">Username</label>
+                    <input type="text" id="username" required class="w-full px-5 py-3.5 rounded-2xl border-2 border-slate-100 focus:border-indigo-600 focus:ring-0 outline-none transition text-sm font-semibold">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1.5">Password</label>
+                    <input type="password" id="password" required class="w-full px-5 py-3.5 rounded-2xl border-2 border-slate-100 focus:border-indigo-600 focus:ring-0 outline-none transition text-sm font-semibold">
+                </div>
+                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-4 rounded-2xl shadow-lg shadow-indigo-100 transition-all active:scale-95">Masuk Aplikasi</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MAIN APP SECTION -->
+    <div id="mainApp" class="hidden flex flex-col md:flex-row min-h-screen">
+        <!-- SIDEBAR -->
+        <aside class="w-full md:w-72 bg-white border-r border-slate-200 flex flex-col sticky top-0 h-screen">
+            <div class="p-8 border-b border-slate-50">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-indigo-600 rounded-xl text-white flex items-center justify-center text-xl shadow-lg">
+                        <i class="fa-solid fa-file-invoice-dollar"></i>
+                    </div>
+                    <div>
+                        <h2 class="font-extrabold text-slate-800 leading-none">FamilyCash</h2>
+                        <span class="text-[10px] text-indigo-600 font-bold uppercase tracking-wider">Sheet Integrated</span>
+                    </div>
+                </div>
+            </div>
+
+            <nav class="flex-1 p-4 space-y-2 mt-4">
+                <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-item w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-bold text-sm active-tab transition-all">
+                    <i class="fa-solid fa-chart-line w-5"></i> Dashboard & Alokasi
+                </button>
+                <button onclick="switchTab('transactions')" id="nav-transactions" class="nav-item w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-bold text-sm text-slate-500 hover:bg-slate-50 transition-all">
+                    <i class="fa-solid fa-table-list w-5"></i> Log Transaksi (Sheet)
+                </button>
+                <button onclick="switchTab('recap')" id="nav-recap" class="nav-item w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-bold text-sm text-slate-500 hover:bg-slate-50 transition-all">
+                    <i class="fa-solid fa-calendar-check w-5"></i> Rekapitulasi
+                </button>
+            </nav>
+
+            <div class="p-6">
+                <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                    <p id="navUsername" class="font-extrabold text-xs text-slate-800">-</p>
+                    <p id="navRole" class="text-[10px] font-bold text-indigo-500 uppercase">-</p>
+                    <button onclick="handleLogout()" class="mt-4 text-[10px] font-black text-rose-500 hover:text-rose-600 flex items-center gap-2">
+                        <i class="fa-solid fa-power-off"></i> KELUAR
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- CONTENT AREA -->
+        <main class="flex-1 p-6 md:p-10 max-w-7xl mx-auto w-full overflow-x-hidden">
+            
+            <!-- TAB: DASHBOARD -->
+            <div id="tab-dashboard" class="tab-content space-y-8 animate-in fade-in duration-500">
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-2xl font-black text-slate-800">Ikhtisar Keuangan <span id="dashPeriodTitle" class="text-indigo-600">Bulan Ini</span></h2>
+                        <p class="text-slate-500 text-sm font-medium">Monitoring perbandingan Rencana vs Realita berdasarkan alokasi 7 pos dana.</p>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button onclick="openModalImport()" id="btnImportDash" class="bg-white border border-slate-200 text-slate-700 font-bold px-5 py-3 rounded-2xl text-xs hover:bg-slate-50 transition flex items-center gap-2 shadow-sm">
+                            <i class="fa-solid fa-file-excel text-emerald-600"></i> Import Excel
+                        </button>
+                        <button onclick="openModalAdd()" id="btnAddDash" class="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-6 py-3 rounded-2xl shadow-lg shadow-indigo-100 flex items-center gap-2 transition active:scale-95">
+                            <i class="fa-solid fa-plus-circle"></i> Catat Transaksi
+                        </button>
+                    </div>
+                </div>
+
+                <!-- CARDS RINGKASAN MTD -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                    <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Masuk (Bulan Ini)</p>
+                        <p id="dashIn" class="text-2xl font-black text-emerald-600">Rp 0</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Keluar (Bulan Ini)</p>
+                        <p id="dashOut" class="text-2xl font-black text-rose-600">Rp 0</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Surplus / Defisit</p>
+                        <p id="dashNet" class="text-2xl font-black text-indigo-600">Rp 0</p>
+                    </div>
+                </div>
+
+                <!-- PLAN VS REALITY GRID -->
+                <div>
+                    <h3 class="font-extrabold text-slate-800 mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-pie text-indigo-600"></i> Alokasi 7 Pos Dana (Plan vs Reality)
+                    </h3>
+                    <div id="planRealityGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                        <!-- Rendered by JS -->
+                    </div>
+                </div>
+
+                <!-- TABEL HARI INI / MTD -->
+                <div class="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+                    <div class="px-8 py-5 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
+                        <h3 class="font-extrabold text-slate-800 text-sm">Catatan Terbaru Bulan Ini</h3>
+                        <button onclick="switchTab('transactions')" class="text-indigo-600 text-[11px] font-extrabold hover:underline uppercase tracking-wider">Lihat Semua Data Sheet</button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead class="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                <tr>
+                                    <th class="px-6 py-4">Tanggal & Waktu</th>
+                                    <th class="px-6 py-4">Nama</th>
+                                    <th class="px-6 py-4">Jenis & Kategori</th>
+                                    <th class="px-6 py-4">Deskripsi</th>
+                                    <th class="px-6 py-4 text-right">Nominal</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableDash" class="divide-y divide-slate-50 text-sm font-medium"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: TRANSAKSI (LOG SPREADSHEET UTUH) -->
+            <div id="tab-transactions" class="tab-content hidden space-y-6 animate-in slide-in-from-bottom-4 duration-500">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                        <h2 class="text-2xl font-black text-slate-800">Log Transaksi Lengkap</h2>
+                        <p class="text-slate-500 text-xs font-semibold">Tampilan data sesuai dengan format kolom Google Sheets Anda.</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="openModalExport()" class="bg-slate-900 text-white font-bold px-6 py-3 rounded-2xl text-xs hover:bg-slate-800 transition flex items-center gap-2">
+                            <i class="fa-solid fa-download"></i> Export Laporan (Filter Date)
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest">
+                                <tr>
+                                    <th class="px-6 py-4">Tanggal</th>
+                                    <th class="px-6 py-4">Waktu</th>
+                                    <th class="px-6 py-4">Nama</th>
+                                    <th class="px-6 py-4">Jenis</th>
+                                    <th class="px-6 py-4">Kategori</th>
+                                    <th class="px-6 py-4">Deskripsi</th>
+                                    <th class="px-6 py-4 text-right">Nominal</th>
+                                    <th class="px-6 py-4 text-center">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableFull" class="divide-y divide-slate-50 font-medium"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: REKAPITULASI -->
+            <div id="tab-recap" class="tab-content hidden space-y-6 animate-in slide-in-from-right-4 duration-500">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-2xl font-black text-slate-800">Rekapitulasi Keuangan</h2>
+                        <p class="text-slate-500 text-xs font-semibold">Klik tombol detail pada baris untuk melihat perbandingan Plan vs Reality 7 pos dana.</p>
+                    </div>
+                    <div class="bg-slate-200 p-1 rounded-xl flex gap-1">
+                        <button onclick="setRecapMode('month')" id="btnM" class="px-4 py-2 rounded-lg text-[10px] font-black transition-all bg-white text-indigo-600 shadow-sm">BULANAN</button>
+                        <button onclick="setRecapMode('year')" id="btnY" class="px-4 py-2 rounded-lg text-[10px] font-black transition-all text-slate-500">TAHUNAN</button>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-slate-50 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            <tr>
+                                <th class="px-8 py-5">Periode Laporan</th>
+                                <th class="px-8 py-5 text-right">Total Masuk</th>
+                                <th class="px-8 py-5 text-right">Total Keluar</th>
+                                <th class="px-8 py-5 text-right">Surplus/Defisit</th>
+                                <th class="px-8 py-5 text-center">Breakdown Pos</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableRecap" class="divide-y divide-slate-50 font-bold"></tbody>
+                    </table>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <script>
+        /**
+         ============================================================
+         WAJIB DIUBAH!
+         Ganti URL di bawah dengan URL Web App Anda setelah deploy.
+         ============================================================
+        */
+        const APP_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwF-xfsU6qpHde6XQjEcdP8fUxj1nOoFrMav2UD8flDl0IiWyHKp-F3CRn7my0vH181/exec";
+
+        let currentUser = null;
+        let recapMode = 'month';
+        let transactions = [];
+
+        const ALLOCATION_RULES = [
+            { id: 'bh', name: 'Biaya Hidup', pct: 50, color: 'indigo' },
+            { id: 'iv', name: 'Investasi', pct: 20, color: 'emerald' },
+            { id: 'cd', name: 'Cadangan', pct: 10, color: 'amber' },
+            { id: 'ds', name: 'Dana Sosial', pct: 7.5, color: 'purple' },
+            { id: 'ff', name: 'Foya-foya', pct: 5, color: 'rose' },
+            { id: 'tc', name: 'Tabungan Cash', pct: 5, color: 'teal' },
+            { id: 'dw', name: 'Dana Wajib', pct: 2.5, color: 'blue' }
+        ];
+
+        const formatIDR = (num) => 'Rp. ' + new Intl.NumberFormat('id-ID', { maximumFractionDigits: 2 }).format(num || 0);
+
+        function formatDateID(dateStr) {
+            if(!dateStr) return '';
+            const parts = dateStr.split('-');
+            if(parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+            return dateStr;
+        }
+
+        function showToast(msg, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            const t = document.createElement('div');
+            t.className = `px-6 py-4 rounded-2xl shadow-2xl text-white font-bold text-xs flex items-center gap-3 transition-all transform translate-y-4 opacity-0 ${type === 'success' ? 'bg-indigo-600' : 'bg-rose-600'}`;
+            t.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-circle-check' : 'fa-circle-exclamation'}"></i> ${msg}`;
+            container.appendChild(t);
+            setTimeout(() => t.classList.remove('opacity-0', 'translate-y-4'), 10);
+            setTimeout(() => { t.classList.add('opacity-0', '-translate-y-4'); setTimeout(() => t.remove(), 500); }, 3000);
+        }
+
+        function showLoading(show, text = 'Memproses Data...') { 
+            document.getElementById('loadingText').innerText = text;
+            document.getElementById('loadingOverlay').classList.toggle('hidden', !show); 
+        }
+
+        function maskRupiah(input) {
+            let val = input.value.replace(/[^0-9]/g, '');
+            if(val) {
+                input.value = new Intl.NumberFormat('id-ID').format(val);
+            } else {
+                input.value = '';
+            }
+        }
+
+        async function callBackend(action, payload = {}) {
+            if(APP_SCRIPT_URL.includes("YOUR_SCRIPT_ID")) {
+                showToast("Pengaturan URL Web App (Code.gs) Belum Diisi!", "error");
+                throw new Error("Missing Script URL");
+            }
+            try {
+                const response = await fetch(APP_SCRIPT_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({ action: action, data: payload, token: sessionStorage.getItem('fc_token') || '' })
+                });
+                const res = await response.json();
+                if (!res.success) {
+                    throw new Error(res.message || 'Terjadi kesalahan sistem backend');
+                }
+                return res;
+            } catch (err) {
+                showToast(err.message, 'error');
+                throw err;
+            }
+        }
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            const u = document.getElementById('username').value.trim();
+            const p = document.getElementById('password').value.trim();
+            
+            showLoading(true, 'Melakukan Verifikasi Login...');
+            try {
+                const res = await callBackend('login', { username: u, password: p });
+                sessionStorage.setItem('fc_token', res.token);
+                sessionStorage.setItem('fc_user', JSON.stringify(res.user));
+                currentUser = res.user;
+                
+                document.getElementById('loginSection').classList.add('hidden');
+                document.getElementById('mainApp').classList.remove('hidden');
+                initApp();
+                showToast(`Selamat datang kembali, ${currentUser.username}!`);
+            } catch (err) {
+                // Toast already shown in callBackend
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function handleLogout() {
+            sessionStorage.removeItem('fc_token');
+            sessionStorage.removeItem('fc_user');
+            currentUser = null;
+            document.getElementById('mainApp').classList.add('hidden');
+            document.getElementById('loginSection').classList.remove('hidden');
+            showToast('Anda telah keluar.');
+        }
+
+        function initApp() {
+            const savedUser = sessionStorage.getItem('fc_user');
+            if(savedUser && !currentUser) currentUser = JSON.parse(savedUser);
+            
+            if(currentUser) {
+                document.getElementById('navUsername').innerText = currentUser.username;
+                document.getElementById('navRole').innerText = `Role: ${currentUser.role}`;
+                
+                if(currentUser.role === 'Viewer') {
+                    document.getElementById('btnAddDash').classList.add('hidden');
+                    document.getElementById('btnImportDash').classList.add('hidden');
+                } else {
+                    document.getElementById('btnAddDash').classList.remove('hidden');
+                    document.getElementById('btnImportDash').classList.remove('hidden');
+                }
+
+                loadDataFromBackend();
+            }
+        }
+
+        async function loadDataFromBackend() {
+            showLoading(true, 'Mengambil Data Spreadsheet...');
+            try {
+                const res = await callBackend('get_data');
+                transactions = res.data || [];
+                refreshAll();
+            } catch (err) {
+                // error handled
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function refreshAll() {
+            renderDashboard();
+            renderTransactions();
+            renderRecap();
+        }
+
+        function switchTab(id) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active-tab'));
+            document.getElementById(`tab-${id}`).classList.remove('hidden');
+            document.getElementById(`nav-${id}`).classList.add('active-tab');
+        }
+
+        function renderDashboard() {
+            const now = new Date();
+            const targetMonth = now.getMonth();
+            const targetYear = now.getFullYear();
+
+            const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+            document.getElementById('dashPeriodTitle').innerText = `${monthNames[targetMonth]} ${targetYear}`;
+
+            const monthData = transactions.filter(t => {
+                const d = new Date(t.date);
+                return d.getMonth() === targetMonth && d.getFullYear() === targetYear;
+            });
+
+            const income = monthData.filter(t => t.type === 'Masuk').reduce((s,t) => s + t.amount, 0);
+            const expense = monthData.filter(t => t.type === 'Keluar').reduce((s,t) => s + t.amount, 0);
+
+            document.getElementById('dashIn').innerText = formatIDR(income);
+            document.getElementById('dashOut').innerText = formatIDR(expense);
+            document.getElementById('dashNet').innerText = formatIDR(income - expense);
+
+            // Plan vs Reality Cards
+            const grid = document.getElementById('planRealityGrid');
+            grid.innerHTML = '';
+
+            ALLOCATION_RULES.forEach(rule => {
+                const plan = income * (rule.pct / 100);
+                const reality = monthData.filter(t => (t.category === rule.name || t.pos === rule.name) && t.type === 'Keluar').reduce((s,t) => s + t.amount, 0);
+                const pctUsed = plan > 0 ? (reality / plan) * 100 : 0;
+                
+                grid.innerHTML += `
+                    <div class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
+                        <div class="flex justify-between items-center mb-2">
+                            <p class="text-[10px] font-black text-slate-400 uppercase">${rule.name}</p>
+                            <span class="text-[10px] font-extrabold text-${rule.color}-600 bg-${rule.color}-50 px-2 py-0.5 rounded-full">${rule.pct}%</span>
+                        </div>
+                        <div class="space-y-1 mb-3">
+                            <div class="flex justify-between text-[11px] font-bold">
+                                <span class="text-slate-400">Plan:</span>
+                                <span class="text-slate-800">${formatIDR(plan)}</span>
+                            </div>
+                            <div class="flex justify-between text-[11px] font-bold">
+                                <span class="text-slate-400">Realita:</span>
+                                <span class="${reality > plan ? 'text-rose-600' : 'text-indigo-600'}">${formatIDR(reality)}</span>
+                            </div>
+                        </div>
+                        <div class="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div class="h-full bg-${rule.color}-500 transition-all duration-1000" style="width: ${Math.min(pctUsed, 100)}%"></div>
+                        </div>
+                        <p class="text-[9px] font-bold mt-2 ${pctUsed > 100 ? 'text-rose-500 font-extrabold' : 'text-slate-400'}">${pctUsed.toFixed(1)}% Terpakai</p>
+                    </div>
+                `;
+            });
+
+            // Table Dash
+            const tbody = document.getElementById('tableDash');
+            tbody.innerHTML = '';
+            monthData.slice().sort((a,b) => b.id - a.id).slice(0, 6).forEach(t => {
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="px-6 py-3 text-xs text-slate-500 font-bold">${formatDateID(t.date)} <span class="text-slate-400 text-[10px] ml-1">${t.time}</span></td>
+                        <td class="px-6 py-3 font-extrabold text-slate-800">${t.name}</td>
+                        <td class="px-6 py-3">
+                            <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase ${t.type === 'Masuk' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}">${t.type}</span>
+                            <span class="text-xs font-bold text-slate-600 ml-1">${t.category}</span>
+                        </td>
+                        <td class="px-6 py-3 font-semibold text-slate-700 text-xs">${t.desc}</td>
+                        <td class="px-6 py-3 text-right font-black ${t.type === 'Masuk' ? 'text-emerald-600' : 'text-rose-600'} text-sm">${formatIDR(t.amount)}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        function renderTransactions() {
+            const tbody = document.getElementById('tableFull');
+            tbody.innerHTML = '';
+            transactions.slice().sort((a,b) => b.id - a.id).forEach(t => {
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="px-6 py-4 font-bold text-slate-700 text-xs">${formatDateID(t.date)}</td>
+                        <td class="px-6 py-4 text-xs font-mono text-slate-500">${t.time}</td>
+                        <td class="px-6 py-4 font-extrabold text-slate-800 text-xs">${t.name}</td>
+                        <td class="px-6 py-4">
+                            <span class="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase ${t.type === 'Masuk' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}">${t.type}</span>
+                        </td>
+                        <td class="px-6 py-4 font-bold text-slate-700 text-xs">${t.category}</td>
+                        <td class="px-6 py-4 font-medium text-slate-600 text-xs">${t.desc}</td>
+                        <td class="px-6 py-4 text-right font-black ${t.type === 'Masuk' ? 'text-emerald-600' : 'text-rose-600'} text-sm">${formatIDR(t.amount)}</td>
+                        <td class="px-6 py-4 text-center">
+                            ${currentUser.role === 'Admin' ? `<button onclick="deleteTrx(${t.id})" class="text-slate-300 hover:text-rose-600 transition"><i class="fa-solid fa-trash-can"></i></button>` : '-'}
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function setRecapMode(m) {
+            recapMode = m;
+            document.getElementById('btnM').className = `px-4 py-2 rounded-lg text-[10px] font-black transition-all ${m === 'month' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`;
+            document.getElementById('btnY').className = `px-4 py-2 rounded-lg text-[10px] font-black transition-all ${m === 'year' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`;
+            renderRecap();
+        }
+
+        function renderRecap() {
+            const tbody = document.getElementById('tableRecap');
+            tbody.innerHTML = '';
+            let map = {};
+
+            transactions.forEach(t => {
+                const d = new Date(t.date);
+                const key = recapMode === 'month' ? `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2,'0')}` : `${d.getFullYear()}`;
+                if(!map[key]) map[key] = { inc: 0, exp: 0 };
+                if(t.type === 'Masuk') map[key].inc += t.amount;
+                else map[key].exp += t.amount;
+            });
+
+            Object.keys(map).sort().reverse().forEach(key => {
+                const net = map[key].inc - map[key].exp;
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="px-8 py-5 font-black text-slate-800 text-base">${key}</td>
+                        <td class="px-8 py-5 text-right font-extrabold text-emerald-600">${formatIDR(map[key].inc)}</td>
+                        <td class="px-8 py-5 text-right font-extrabold text-rose-600">${formatIDR(map[key].exp)}</td>
+                        <td class="px-8 py-5 text-right font-black ${net >= 0 ? 'text-indigo-600' : 'text-rose-600'}">${formatIDR(net)}</td>
+                        <td class="px-8 py-5 text-center">
+                            <button onclick="openRecapDetail('${key}')" class="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white transition flex items-center justify-center mx-auto"><i class="fa-solid fa-eye"></i></button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function openModalAdd() {
+            if(currentUser.role !== 'Admin') return showToast('Akses ditolak untuk Viewer', 'error');
+            const now = new Date();
+            const timeNow = now.toTimeString().split(' ')[0];
+
+            document.getElementById('modalTitle').innerText = 'Input Catatan Keuangan Baru';
+            document.getElementById('modalBody').innerHTML = `
+                <div class="space-y-4">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Tanggal</label>
+                            <input type="date" id="fDate" value="${now.toISOString().split('T')[0]}" class="w-full px-4 py-3 rounded-2xl border border-slate-200 text-xs font-bold bg-slate-50">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Waktu</label>
+                            <input type="text" id="fTime" value="${timeNow}" class="w-full px-4 py-3 rounded-2xl border border-slate-200 text-xs font-bold bg-slate-50">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Nama Penginput</label>
+                            <input type="text" id="fName" value="${currentUser.username === 'admin' ? 'Kurnia' : currentUser.username}" class="w-full px-4 py-3 rounded-2xl border border-slate-200 text-xs font-bold bg-slate-50">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Jenis</label>
+                            <select id="fType" onchange="updateCategoryOptions(this.value)" class="w-full px-4 py-3 rounded-2xl border border-slate-200 text-xs font-bold bg-slate-50">
+                                <option value="Keluar">Keluar</option>
+                                <option value="Masuk">Masuk</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Kategori / Pos Dana</label>
+                        <select id="fCat" class="w-full px-4 py-3 rounded-2xl border border-slate-200 text-xs font-bold bg-slate-50">
+                            ${ALLOCATION_RULES.map(r => `<option value="${r.name}">${r.name}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Deskripsi</label>
+                        <input type="text" id="fDesc" placeholder="Contoh: Belanja Bensin, Obat, TPG Juni, dll" class="w-full px-4 py-3 rounded-2xl border border-slate-200 text-xs font-bold outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Nominal (Rp)</label>
+                        <div class="relative">
+                            <span class="absolute left-4 top-1/2 -translate-y-1/2 font-black text-slate-400 text-xs">Rp.</span>
+                            <input type="text" id="fAmount" onkeyup="maskRupiah(this)" placeholder="0" class="w-full pl-12 pr-4 py-3 rounded-2xl border-2 border-indigo-100 text-lg font-black text-indigo-700 outline-none focus:border-indigo-500">
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('modalFooter').innerHTML = `
+                <button onclick="closeModal()" class="px-6 py-2 text-xs font-bold text-slate-400">Batal</button>
+                <button onclick="saveTrx()" class="px-8 py-3 bg-indigo-600 text-white rounded-2xl text-xs font-black shadow-lg shadow-indigo-100">Simpan Ke Sheet</button>
+            `;
+            document.getElementById('modalOverlay').classList.remove('hidden');
+        }
+
+        function updateCategoryOptions(type) {
+            const catSelect = document.getElementById('fCat');
+            if(type === 'Masuk') {
+                catSelect.innerHTML = `
+                    <option value="Gaji">Gaji</option>
+                    <option value="Dividen">Dividen</option>
+                    <option value="Bonus">Bonus / Hadiah</option>
+                    <option value="Lainnya">Lainnya</option>
+                `;
+            } else {
+                catSelect.innerHTML = ALLOCATION_RULES.map(r => `<option value="${r.name}">${r.name}</option>`).join('');
+            }
+        }
+
+        async function saveTrx() {
+            const rawAmount = document.getElementById('fAmount').value.replace(/[^0-9]/g, '');
+            const amount = parseFloat(rawAmount);
+            if(!amount || amount <= 0) return showToast('Nominal harus diisi!', 'error');
+
+            const type = document.getElementById('fType').value;
+            const cat = document.getElementById('fCat').value;
+
+            const payload = {
+                date: document.getElementById('fDate').value,
+                time: document.getElementById('fTime').value || '00:00:00',
+                name: document.getElementById('fName').value || 'User',
+                type: type,
+                category: cat,
+                desc: document.getElementById('fDesc').value || '-',
+                amount: amount
+            };
+
+            showLoading(true, 'Menyimpan transaksi ke Spreadsheet...');
+            try {
+                await callBackend('save_data', payload);
+                closeModal();
+                showToast('Catatan berhasil disimpan ke Sheet!');
+                await loadDataFromBackend();
+            } catch (err) {
+                // error handled
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function deleteTrx(id) {
+            if(!confirm("Apakah Anda yakin ingin menghapus baris transaksi ini dari Spreadsheet?")) return;
+            showLoading(true, 'Mengeksekusi penghapusan data...');
+            try {
+                await callBackend('delete_data', { id: id });
+                showToast('Baris data terhapus.');
+                await loadDataFromBackend();
+            } catch (err) {
+                // error handled
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function openModalExport() {
+            document.getElementById('modalTitle').innerText = 'Export Data Laporan';
+            document.getElementById('modalBody').innerHTML = `
+                <div class="space-y-4">
+                    <p class="text-xs text-slate-500 font-medium">Filter rentang tanggal sebelum mengunduh laporan.</p>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Mulai Dari</label>
+                            <input type="date" id="expStart" value="2026-07-01" class="w-full px-4 py-3 rounded-2xl border border-slate-200 text-xs font-bold bg-slate-50">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Sampai Dengan</label>
+                            <input type="date" id="expEnd" value="2026-07-31" class="w-full px-4 py-3 rounded-2xl border border-slate-200 text-xs font-bold bg-slate-50">
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('modalFooter').innerHTML = `
+                <button onclick="doExport('xlsx')" class="bg-emerald-600 text-white px-5 py-3 rounded-2xl text-xs font-black">Unduh Excel (.xlsx)</button>
+                <button onclick="doExport('pdf')" class="bg-rose-600 text-white px-5 py-3 rounded-2xl text-xs font-black">Unduh PDF</button>
+            `;
+            document.getElementById('modalOverlay').classList.remove('hidden');
+        }
+
+        function doExport(type) {
+            const start = document.getElementById('expStart').value;
+            const end = document.getElementById('expEnd').value;
+            if(!start || !end) return showToast('Tentukan rentang tanggal!', 'error');
+
+            const filtered = transactions.filter(t => t.date >= start && t.date <= end);
+            if(filtered.length === 0) return showToast('Tidak ada transaksi pada tanggal tersebut', 'error');
+
+            showLoading(true, 'Menyiapkan File Unduhan...');
+            setTimeout(() => {
+                showLoading(false);
+                if(type === 'xlsx') {
+                    const exportRows = filtered.map(t => ({
+                        "Tanggal": formatDateID(t.date),
+                        "Waktu": t.time,
+                        "Nama": t.name,
+                        "Jenis": t.type,
+                        "Kategori": t.category,
+                        "Deskripsi": t.desc,
+                        "Nominal": t.amount
+                    }));
+                    const ws = XLSX.utils.json_to_sheet(exportRows);
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, "Keuangan");
+                    XLSX.writeFile(wb, `Laporan_Keuangan_Keluarga_${start}_sd_${end}.xlsx`);
+                } else {
+                    const { jsPDF } = window.jspdf;
+                    const doc = new jsPDF();
+                    doc.setFontSize(14);
+                    doc.text("LAPORAN KEUANGAN KELUARGA", 14, 15);
+                    doc.setFontSize(9);
+                    doc.text(`Periode: ${formatDateID(start)} - ${formatDateID(end)}`, 14, 22);
+
+                    const rows = filtered.map(t => [formatDateID(t.date), t.time, t.name, t.type, t.category, t.desc, formatIDR(t.amount)]);
+                    doc.autoTable({ head: [['Tanggal', 'Waktu', 'Nama', 'Jenis', 'Kategori', 'Deskripsi', 'Nominal']], body: rows, startY: 28 });
+                    doc.save(`Laporan_Keuangan_Keluarga_${start}_sd_${end}.pdf`);
+                }
+                closeModal();
+                showToast('Laporan berhasil diunduh');
+            }, 800);
+        }
+
+        function openModalImport() {
+            if(currentUser.role !== 'Admin') return showToast('Akses ditolak', 'error');
+            document.getElementById('modalTitle').innerText = 'Import Data Spreadsheet Excel';
+            document.getElementById('modalBody').innerHTML = `
+                <div class="space-y-4">
+                    <div class="p-6 border-2 border-dashed border-indigo-200 rounded-3xl text-center bg-indigo-50/20">
+                        <i class="fa-solid fa-file-excel text-4xl text-emerald-500 mb-3"></i>
+                        <p class="text-xs text-slate-600 font-bold mb-3">Pilih file .xlsx yang memiliki kolom:</p>
+                        <p class="text-[10px] text-slate-400 font-mono mb-4">Tanggal | Waktu | Nama | Jenis | Kategori | Deskripsi | Nominal</p>
+                        <input type="file" id="importFile" accept=".xlsx" class="text-xs text-slate-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-black file:bg-indigo-600 file:text-white hover:file:bg-indigo-700">
+                    </div>
+                </div>
+            `;
+            document.getElementById('modalFooter').innerHTML = `
+                <button onclick="doImport()" class="w-full bg-emerald-600 text-white font-black py-3.5 rounded-2xl text-xs">PROSES IMPORT SEKARANG</button>
+            `;
+            document.getElementById('modalOverlay').classList.remove('hidden');
+        }
+
+        function doImport() {
+            const fileInput = document.getElementById('importFile');
+            if(!fileInput.files.length) return showToast('Pilih file Excel terlebih dahulu!', 'error');
+            
+            showLoading(true, 'Membaca data Excel...');
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const data = new Uint8Array(e.target.result);
+                const wb = XLSX.read(data, {type:'array'});
+                const ws = wb.Sheets[wb.SheetNames[0]];
+                const json = XLSX.utils.sheet_to_json(ws);
+                
+                const batchData = json.map(row => {
+                    let dStr = row.Tanggal || row.tanggal || '2026-07-01';
+                    if(dStr.includes('/')) {
+                        const parts = dStr.split('/');
+                        if(parts.length === 3) dStr = `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
+                    }
+                    return {
+                        date: dStr,
+                        time: row.Waktu || row.waktu || '00:00:00',
+                        name: row.Nama || row.nama || currentUser.username,
+                        type: row.Jenis || row.jenis || 'Keluar',
+                        category: row.Kategori || row.kategori || 'Biaya Hidup',
+                        desc: row.Deskripsi || row.deskripsi || '-',
+                        amount: parseFloat(row.Nominal || row.nominal || 0)
+                    };
+                });
+
+                showLoading(true, `Mengunggah ${batchData.length} baris data ke Google Sheet...`);
+                try {
+                    await callBackend('import_batch', { rows: batchData });
+                    closeModal();
+                    showToast(`Berhasil mengimpor ${batchData.length} data transaksi`);
+                    await loadDataFromBackend();
+                } catch (err) {
+                    // error handled
+                } finally {
+                    showLoading(false);
+                }
+            };
+            reader.readAsArrayBuffer(fileInput.files[0]);
+        }
+
+        function openRecapDetail(key) {
+            const filtered = transactions.filter(t => {
+                const d = new Date(t.date);
+                const k = recapMode === 'month' ? `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2,'0')}` : `${d.getFullYear()}`;
+                return k === key;
+            });
+
+            const income = filtered.filter(t => t.type === 'Masuk').reduce((s,t) => s + t.amount, 0);
+
+            document.getElementById('modalTitle').innerText = `Breakdown Performa Alokasi (${key})`;
+            let html = `
+                <div class="space-y-5">
+                    <div class="bg-indigo-600 p-4 rounded-2xl text-white flex justify-between items-center">
+                        <div>
+                            <p class="text-[10px] font-black uppercase text-indigo-200">Total Pemasukan Periode Ini</p>
+                            <p class="text-xl font-black">${formatIDR(income)}</p>
+                        </div>
+                    </div>
+                    <div class="space-y-3">
+                        <p class="text-xs font-black text-slate-700 uppercase">Analisis 7 Pos Dana</p>
+            `;
+
+            ALLOCATION_RULES.forEach(rule => {
+                const plan = income * (rule.pct / 100);
+                const reality = filtered.filter(t => (t.category === rule.name || t.pos === rule.name) && t.type === 'Keluar').reduce((s,t) => s + t.amount, 0);
+                const diff = plan - reality;
+                html += `
+                    <div class="p-3 border border-slate-100 rounded-2xl bg-slate-50/50">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-xs font-extrabold text-slate-800">${rule.name} (${rule.pct}%)</span>
+                            <span class="text-[9px] px-2 py-0.5 rounded font-black ${diff < 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}">
+                                ${diff < 0 ? 'Over Budget' : 'Hemat / Aman'}
+                            </span>
+                        </div>
+                        <div class="flex justify-between text-[11px] text-slate-500 font-medium">
+                            <span>Plan: <b>${formatIDR(plan)}</b></span>
+                            <span>Realita: <b class="${reality > plan ? 'text-rose-600' : 'text-indigo-600'}">${formatIDR(reality)}</b></span>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += `</div></div>`;
+            document.getElementById('modalBody').innerHTML = html;
+            document.getElementById('modalFooter').innerHTML = `<button onclick="closeModal()" class="w-full bg-slate-800 text-white py-3 rounded-2xl text-xs font-black">TUTUP</button>`;
+            document.getElementById('modalOverlay').classList.remove('hidden');
+        }
+
+        function closeModal() { document.getElementById('modalOverlay').classList.add('hidden'); }
+
+        window.onload = function() {
+            const savedUser = sessionStorage.getItem('fc_user');
+            const savedToken = sessionStorage.getItem('fc_token');
+            if (savedUser && savedToken) {
+                currentUser = JSON.parse(savedUser);
+                document.getElementById('loginSection').classList.add('hidden');
+                document.getElementById('mainApp').classList.remove('hidden');
+                initApp();
+            }
+        };
+    </script>
+</body>
+</html>
